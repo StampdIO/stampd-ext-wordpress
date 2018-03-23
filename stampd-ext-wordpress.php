@@ -15,6 +15,19 @@ class StampdExtWordpress {
 	private static $pluginVersion = '1.0';
 	private static $pluginPrefix = 'stampd_ext_wp_';
 	private static $APIBaseURL = 'http://dev.stampd.io/api/v2';
+	private static $blockchains = array(
+		'BTC'  => 'Bitcoin',
+		'ETH'  => 'Ethereum',
+		'BCH'  => 'Bitcoin Cash',
+		'DASH' => 'Dash',
+	);
+	private static $blockchainLinks = array(
+		'BTC'  => 'https://blockchain.info/tx/[txid]',
+		'ETH'  => 'https://etherscan.io/tx/[txid]',
+		'BCH'  => 'https://blockdozer.com/insight/tx/[txid]',
+		'DASH' => 'https://live.blockcypher.com/dash/tx/[txid]',
+	);
+	private static $defaultPostSignature = 'This post has been stamped on the [blockchain] blockchain via <a target="_blank" href="https://stampd.io">stampd.io</a> on [date]. Using the SHA256 hashing algorithm on the content of the post produced the following hash [hash]. The ID of the pertinent transaction is [txid]. <a target="_blank" href="[txlink]">View the transaction on a blockchain explorer.</a>';
 
 	function __construct() {
 		$this->hookOptions();
@@ -59,39 +72,66 @@ class StampdExtWordpress {
 		$api_creds_section_slug = $this::$pluginPrefix . 'api_credentials';
 		add_settings_section( $api_creds_section_slug, __( 'API Credentials', 'stampd' ), array(
 			$this,
-			'displayAPICredentialsOptionHeader'
+			'renderAPICredentialsOptionHeader'
 		), $admin_page_slug );
 
 		// add inputs
 		$input_slug = $this::$pluginPrefix . 'client_id';
 		add_settings_field( $input_slug, __( 'Client ID', 'stampd' ), array(
 			$this,
-			'displayClientIDInput'
+			'renderClientIDInput'
 		), $admin_page_slug, $api_creds_section_slug );
 		register_setting( $api_creds_section_slug, $input_slug );
 
 		$input_slug = $this::$pluginPrefix . 'secret_key';
 		add_settings_field( $input_slug, __( 'Secret Key', 'stampd' ), array(
 			$this,
-			'displaySecretKeyInput'
+			'renderSecretKeyInput'
 		), $admin_page_slug, $api_creds_section_slug );
 		register_setting( $api_creds_section_slug, $input_slug, array( $this, 'sanitizeSecretKey' ) );
+
+		$general_settings_section_slug = $this::$pluginPrefix . 'general_settings';
+		add_settings_section( $general_settings_section_slug, __( 'General Settings', 'stampd' ), array(
+			$this,
+			'renderGeneralSettingsOptionHeader'
+		), $admin_page_slug );
+
+		$input_slug = $this::$pluginPrefix . 'blockchain';
+		add_settings_field( $input_slug, __( 'Blockchain', 'stampd' ), array(
+			$this,
+			'renderBlockchainSelect'
+		), $admin_page_slug, $general_settings_section_slug );
+		register_setting( $general_settings_section_slug, $input_slug );
+
+		$input_slug = $this::$pluginPrefix . 'enable_post_signature';
+		add_settings_field( $input_slug, __( 'Post Signature', 'stampd' ), array(
+			$this,
+			'renderPostSignatureCheckbox'
+		), $admin_page_slug, $general_settings_section_slug );
+		register_setting( $general_settings_section_slug, $input_slug );
+
+		$input_slug = $this::$pluginPrefix . 'signature_text';
+		add_settings_field( $input_slug, __( 'Signature Text', 'stampd' ), array(
+			$this,
+			'renderSignatureTextTextarea'
+		), $admin_page_slug, $general_settings_section_slug );
+		register_setting( $general_settings_section_slug, $input_slug );
 	}
 
 	/*
 	 * Sanitize secret key
+	 *
+	 * @param $value string
 	 */
 	function sanitizeSecretKey( $value ) {
-		// TODO: call init
+
 		$client_id  = get_option( $this::$pluginPrefix . 'client_id' );
 		$secret_key = $value;
+
 		$init       = $this->_APIInitCall( $client_id, $secret_key );
 		$valid_init = $this->_isValidLogin( $init );
 
 		if ( ! $valid_init ) {
-			$input_slug = $this::$pluginPrefix . 'client_id';
-			update_option( $input_slug, '' );
-
 			$input_slug = $this::$pluginPrefix . 'secret_key';
 			add_settings_error(
 				$input_slug,
@@ -100,35 +140,100 @@ class StampdExtWordpress {
 				'error'
 			);
 		}
+
+		return $value;
+	}
+
+	/*
+	 * Post sig textbox
+	 */
+	function renderSignatureTextTextarea() {
+		$slug = $this::$pluginPrefix . 'signature_text';
+		?>
+        <textarea name="<?php echo $slug; ?>" id="<?php echo $slug; ?>" class="large-text code"
+                  rows="5"><?php echo get_option( $slug, $this::$defaultPostSignature ); ?></textarea>
+        <p class="description">
+			<?php _e( 'These shortcodes will be replaced with actual values when used within the signature text field:', 'stampd' ); ?>
+        </p>
+        <ul>
+            <li><strong>[hash]</strong> <?php _e( 'hash result from applying SHA256 to the content', 'stampd' ); ?></li>
+            <li><strong>[date]</strong> <?php _e( 'stamping date', 'stampd' ); ?></li>
+            <li><strong>[blockchain]</strong> <?php _e( 'selected blockchain', 'stampd' ); ?></li>
+            <li><strong>[txid]</strong> <?php _e( 'transaction ID', 'stampd' ); ?></li>
+            <li><strong>[txlink]</strong> <?php _e( 'link to the transaction on a blockchain explorer', 'stampd' ); ?>
+            </li>
+        </ul>
+		<?php
+	}
+
+	/*
+	 * Post sig checkbox
+	 */
+	function renderPostSignatureCheckbox() {
+		$slug = $this::$pluginPrefix . 'enable_post_signature';
+		?>
+        <label for="<?php echo $slug; ?>">
+            <input name="<?php echo $slug; ?>" type="checkbox" id="<?php echo $slug; ?>"
+                   value="enable" <?php echo get_option( $slug ) !== '' ? 'checked' : ''; ?>>
+			<?php _e( 'The following signature will be appended to every stamped post', 'stampd' ); ?>
+        </label>
+		<?php
 	}
 
 	/*
 	 * Client ID input
 	 */
-	function displayClientIDInput() {
-		$client_id_input_slug = $this::$pluginPrefix . 'client_id';
+	function renderClientIDInput() {
+		$slug = $this::$pluginPrefix . 'client_id';
 		?>
-        <input type="text" name="<?php echo $client_id_input_slug; ?>" id="<?php echo $client_id_input_slug; ?>"
-               value="<?php echo get_option( $client_id_input_slug ); ?>"/>
+        <input autocomplete="false" type="text" name="<?php echo $slug; ?>"
+               id="<?php echo $slug; ?>"
+               value="<?php echo get_option( $slug ); ?>"/>
 		<?php
 	}
 
 	/*
      * Secret key input
      */
-	function displaySecretKeyInput() {
-		$client_id_input_slug = $this::$pluginPrefix . 'secret_key';
+	function renderSecretKeyInput() {
+		$slug = $this::$pluginPrefix . 'secret_key';
 		?>
-        <input type="password" name="<?php echo $client_id_input_slug; ?>" id="<?php echo $client_id_input_slug; ?>"
-               value="<?php echo get_option( $client_id_input_slug ); ?>"/>
+        <input autocomplete="new-password" type="password" name="<?php echo $slug; ?>"
+               id="<?php echo $slug; ?>"
+               value="<?php echo get_option( $slug ); ?>"/>
+		<?php
+	}
+
+	/*
+     * Blockchain select
+     */
+	function renderBlockchainSelect() {
+		$client_id_input_slug = $this::$pluginPrefix . 'blockchain';
+		?>
+        <select name="<?php echo $client_id_input_slug; ?>" id="<?php echo $client_id_input_slug; ?>">
+			<?php
+			foreach ( $this::$blockchains as $blockchain_id => $blockchain_name ) {
+				?>
+                <option value="<?php echo $blockchain_id; ?>" <?php selected( get_option( $client_id_input_slug ), $blockchain_id ); ?>><?php echo $blockchain_name; ?></option>
+				<?php
+			}
+			?>
+        </select>
 		<?php
 	}
 
 	/*
 	 * API creds opts header
 	 */
-	function displayAPICredentialsOptionHeader() {
+	function renderAPICredentialsOptionHeader() {
 		echo __( 'Get your client ID and secret key on <a href="https://stampd.io" target="_blank">stampd.io</a>.', 'stampd' );
+	}
+
+	/*
+	 * General settings opts header
+	 */
+	function renderGeneralSettingsOptionHeader() {
+		echo __( 'General plugin settings', 'stampd' );
 	}
 
 	/*
@@ -179,8 +284,46 @@ class StampdExtWordpress {
 	 */
 	function hookPostMetabox() {
 		add_action( 'add_meta_boxes', array( $this, 'addPostMetabox' ) );
-//		add_action( 'save_post', array( $this, 'save_metabox' ), 10, 2 );
+		add_action( 'save_post', array( $this, 'savePostMetabox' ), 9999, 2 );
 	}
+
+	/*
+	 * Save post //  $this::$pluginPrefix . 'post_metabox'
+	 */
+	function savePostMetabox( $post_id ) {
+
+		if ( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE ) {
+			return $post_id;
+		}
+
+		if ( ! isset( $_POST[ $this::$pluginPrefix . 'nonce' ] ) || ! isset( $_POST[ $this::$pluginPrefix . 'stamp_btn' ] ) ) {
+			return $post_id;
+		}
+
+		if ( ! wp_verify_nonce( $_POST[ $this::$pluginPrefix . 'nonce' ], $this::$pluginPrefix . 'post_metabox' ) ) {
+			return $post_id;
+		}
+
+		if ( ! current_user_can( 'edit_page', $post_id ) || ! current_user_can( 'edit_post', $post_id ) ) {
+			return $post_id;
+		}
+
+//		add_settings_error(
+//			$input_slug,
+//			esc_attr( 'settings_updated' ),
+//			__( 'Invalid credentials', 'stampd' ),
+//			'error'
+//		);
+
+		global $post;
+		echo 'metabox save success';
+		echo $post->post_content;
+		die();
+
+		return $post_id;
+
+	}
+
 
 	/*
 	 * Add post metabox
@@ -197,8 +340,7 @@ class StampdExtWordpress {
 	}
 
 	function renderPostMetabox() {
-		echo 'testing1';
-		// wp_nonce_field( 'custom_nonce_action', 'custom_nonce' );
+		require_once 'templates/post-metabox.php';
 	}
 
 	/*
