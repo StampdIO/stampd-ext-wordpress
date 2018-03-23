@@ -15,6 +15,7 @@ class StampdExtWordpress {
 	private static $pluginVersion = '1.0';
 	private static $pluginPrefix = 'stampd_ext_wp_';
 	private static $APIBaseURL = 'http://dev.stampd.io/api/v2';
+//	private static $APIBaseURL = 'https://stampd.io/api/v2';
 	private static $blockchains = array(
 		'BTC'  => 'Bitcoin',
 		'ETH'  => 'Ethereum',
@@ -30,11 +31,37 @@ class StampdExtWordpress {
 	private static $defaultPostSignature = 'This post has been stamped on the [blockchain] blockchain via <a target="_blank" href="https://stampd.io">stampd.io</a> on [date]. Using the SHA256 hashing algorithm on the content of the post produced the following hash [hash]. The ID of the pertinent transaction is [txid]. <a target="_blank" href="[txlink]">View the transaction on a blockchain explorer.</a>';
 
 	function __construct() {
-		$this->hookOptions();
+		$this->_hookOptions();
+		$this->_hookAdminNotices();
 		$this->_loadAssets();
 		$this->_hookAdminSettingsPage();
 		$this->_hookMetaboxes();
 		$this->_addPluginSettingsLink();
+	}
+
+	/*
+	 * Hook admin notices
+	 */
+	private function _hookAdminNotices() {
+		if ( is_admin() ) {
+			add_action( 'admin_notices', array( $this, 'renderAdminNotices' ) );
+		}
+	}
+
+	/*
+	 * Render admin notices
+	 */
+	function renderAdminNotices() {
+		$trans_slug = $this::$pluginPrefix . '_notices';
+		if ( $notice = get_transient( $trans_slug ) ) { ?>
+        <div class="notice notice-<?php echo $notice['type']; ?> is-dismissible">
+            <p><?php echo $notice['message']; ?></p>
+            <button type="button" class="notice-dismiss"><span
+                        class="screen-reader-text"><?php _e( 'Dismiss this notice.' ); ?></span></button>
+            </div><?php
+
+			delete_transient( $trans_slug );
+		}
 	}
 
 	/*
@@ -58,7 +85,7 @@ class StampdExtWordpress {
 	/*
 	 * Hook options
 	 */
-	private function hookOptions() {
+	private function _hookOptions() {
 		add_action( 'admin_init', array( $this, 'loadOptions' ) );
 	}
 
@@ -308,22 +335,81 @@ class StampdExtWordpress {
 			return $post_id;
 		}
 
-//		add_settings_error(
-//			$input_slug,
-//			esc_attr( 'settings_updated' ),
-//			__( 'Invalid credentials', 'stampd' ),
-//			'error'
-//		);
-
 		global $post;
-		echo 'metabox save success';
-		echo $post->post_content;
-		die();
+
+		$client_id  = get_option( $this::$pluginPrefix . 'client_id' );
+		$secret_key = get_option( $this::$pluginPrefix . 'secret_key' );
+		$blockchain = get_option( $this::$pluginPrefix . 'blockchain' );
+		$hash       = hash( 'sha256', $post->post_content );
+
+		$init       = $this->_APIInitCall( $client_id, $secret_key );
+		$valid_init = $this->_isValidLogin( $init );
+
+		if ( ! $valid_init ) {
+			$this->_addNotice( __( 'Invalid credentials', 'stampd' ), 'error' );
+
+			return $post_id;
+		}
+
+		$session_id = $init->session_id;
+
+		// Post hash
+		$fields = array(
+			'requestedURL' => '/hash',
+			'force_method' => 'POST', // method can also be forced via a parameter
+			'sess_id'      => $session_id, // old param name: session_id
+			'blockchain'   => $blockchain,
+			'hash'         => $hash,
+//    		'meta_emails'   => $email,
+//    		'meta_notes'    => $notes,
+//    		'meta_filename' => $filename,
+//    		'meta_category' => ! stampd_empty( $cat_obj ) ? $cat_obj->name : null,
+		);
+
+		$post_response = $this->_performPostCall( $this::$APIBaseURL . '.php', $fields );
+
+		if ( is_object( $post_response ) && property_exists( $post_response, 'code' ) ) {
+			$code = $post_response->code;
+
+			if ( $code === 106 ) {
+				$this->_addNotice( __( 'You have run out of stamps. Please visit <a href="https://stampd.io">stampd.io</a> to get more.', 'stampd' ), 'error' );
+
+				return $post_id;
+			} else if ( $code === 202 ) {
+				$this->_addNotice( __( 'This post has already been stamped.', 'stampd' ), 'info' );
+
+				return $post_id;
+			} else if ( $code === 301 ) {
+				// success
+
+				// TODO: update post meta
+//                $post_response->txid;
+//                $post_response->stamps_remaining;
+
+				$this->_addNotice( __( 'Post stamped successfully. Stamps remaining: ', 'stampd' ) . $post_response->stamps_remaining . '.' );
+
+				return $post_id;
+			}
+
+		} else {
+			$this->_addNotice( __( 'There was an error with your stamping. Please try again.', 'stampd' ), 'error' );
+		}
 
 		return $post_id;
-
 	}
 
+	/*
+	 * Add notice
+	 *
+	 * @param $message string
+	 * @param $type string [error|warning|info|success]
+	 */
+	private function _addNotice( $message, $type = 'success' ) {
+		set_transient( $this::$pluginPrefix . '_notices', array(
+			'message' => $message,
+			'type'    => $type
+		), 45 );
+	}
 
 	/*
 	 * Add post metabox
