@@ -382,9 +382,16 @@ class StampdExtWordpress {
 			} else if ( $code === 301 ) {
 				// success
 
-				// TODO: update post meta
-//                $post_response->txid;
-//                $post_response->stamps_remaining;
+				$link = str_replace( '[txid]', $post_response->txid, self::$blockchainLinks[ $blockchain ] );
+
+				$this->savePostStampdMeta( $post_id, array(
+					'stamped'    => true,
+					'blockchain' => $blockchain,
+					'link'       => $link,
+					'date'       => date( 'Y-m-d', current_time( 'timestamp', 0 ) ),
+					'hash'       => $hash,
+					'txid'       => $post_response->txid,
+				) );
 
 				$this->_addNotice( __( 'Post stamped successfully. Stamps remaining: ', 'stampd' ) . $post_response->stamps_remaining . '.' );
 
@@ -396,6 +403,36 @@ class StampdExtWordpress {
 		}
 
 		return $post_id;
+	}
+
+	/*
+	 * Save post stampd meta
+	 *
+	 * @param $post_id string
+	 * @return mixed
+	 */
+	function savePostStampdMeta( $post_id, $meta ) {
+		return update_post_meta( $post_id, $this::$pluginPrefix . 'stampd_meta', $meta );
+	}
+
+	/*
+	 * Get post stampd meta
+	 *
+	 * @param $post_id string
+	 * @return mixed
+	 */
+	function getPostStampdMeta( $post_id ) {
+		return get_post_meta( $post_id, $this::$pluginPrefix . 'stampd_meta', true );
+	}
+
+	/*
+	 * Return blockchain in human readable form
+	 *
+	 * @param $blockchain string
+	 * @return string
+	 */
+	function blockchainToReadable( $blockchain ) {
+		return isset( self::$blockchains[ $blockchain ] ) ? self::$blockchains[ $blockchain ] : null;
 	}
 
 	/*
@@ -537,4 +574,5 @@ class StampdExtWordpress {
 }
 
 // Init the plugin
+global $_StampdExtWordpress;
 $_StampdExtWordpress = new StampdExtWordpress();
