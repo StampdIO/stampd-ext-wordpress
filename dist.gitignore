@@ -1,8 +1,0 @@
-/node_modules
-/.sass-cache/*
-/.idea
-/assets/src
-/gulp/
-/package.json
-/package-lock.json
-/gulpfile.js
