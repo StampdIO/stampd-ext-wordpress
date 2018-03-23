@@ -9,6 +9,18 @@ Version: 1.0
 Author URI: https://stampd.io
 */
 
+/**
+ * Stampd.io Blockchain Stamping
+ *
+ * Enables blockchain stamping of post content
+ *
+ * @version 1.0
+ * @package stampd-ext-wordpress
+ * @author Hypermetron (Minas Antonios)
+ * @copyright Copyright (c) 2018, Minas Antonios
+ * @license http://opensource.org/licenses/gpl-2.0.php GPL v2 or later
+ */
+
 class StampdExtWordpress {
 
 	// Statics
@@ -458,7 +470,7 @@ class StampdExtWordpress {
 					'show_sig'   => true, // default
 				) );
 
-				$this->_addNotice( __( 'Post stamped successfully. You have ', 'stampd' ) . $post_response->stamps_remaining . __( 'stamps remaining.', 'stampd' ) );
+				$this->_addNotice( __( 'Post stamped successfully. You have ', 'stampd' ) . $post_response->stamps_remaining . __( ' stamps remaining.', 'stampd' ) );
 
 				return $post_id;
 			}
@@ -535,20 +547,20 @@ class StampdExtWordpress {
 	 * Load all assets CSS, JS
 	 */
 	private function _loadAssets() {
-		add_action( 'wp_enqueue_scripts', array( $this, 'loadFrontCSS' ) );
+//		add_action( 'wp_enqueue_scripts', array( $this, 'loadFrontCSS' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'loadAdminCSS' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'loadAdminJS' ) );
 	}
 
-	/*
-	 * Load front CSS
-	 * @note can't be private because it is hooked
-	 */
-	function loadFrontCSS() {
-		$style_name = $this::$pluginPrefix . 'front_css';
-		wp_register_style( $style_name, plugins_url( '/assets/css/front.min.css', __FILE__ ), false, $this::$pluginVersion );
-		wp_enqueue_style( $style_name );
-	}
+//	/*
+//	 * Load front CSS
+//	 * @note can't be private because it is hooked
+//	 */
+//	function loadFrontCSS() {
+//		$style_name = $this::$pluginPrefix . 'front_css';
+//		wp_register_style( $style_name, plugins_url( '/assets/css/front.min.css', __FILE__ ), false, $this::$pluginVersion );
+//		wp_enqueue_style( $style_name );
+//	}
 
 	/*
 	 * Load admin CSS

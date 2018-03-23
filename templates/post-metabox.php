@@ -1,5 +1,15 @@
 <?php
 
+/**
+ * Post metabox form
+ *
+ * @version 1.0
+ * @package stampd-ext-wordpress
+ * @author Hypermetron (Minas Antonios)
+ * @copyright Copyright (c) 2018, Minas Antonios
+ * @license http://opensource.org/licenses/gpl-2.0.php GPL v2 or later
+ */
+
 global $post;
 global $_StampdExtWordpress;
 
@@ -10,6 +20,7 @@ $stamp_active     = false;
 $post_sig_enabled = get_option( 'stampd_ext_wp_enable_post_signature' );
 
 $post_meta = $_StampdExtWordpress->getPostStampdMeta( $post->ID );
+
 // $post_meta['stamped']
 // $post_meta['blockchain']
 // $post_meta['link']
@@ -90,8 +101,13 @@ if ( ! $stamp_active ) {
 	?>
     <div id="major-publishing-actions">
 
-        <div id="delete-action" class="js-stampd-post-changed" style="display:none;">
-			<?php _e( 'Please <strong>update</strong> the post', 'stampd' ); ?>
+        <div id="delete-action">
+            <div class="js-stampd-post-changed" style="display:none;">
+				<?php _e( 'Please <strong>update</strong> the post', 'stampd' ); ?>
+            </div>
+            <div class="js-stampd-post-settings">
+                <a href="options-general.php?page=stampd_ext_wp_plugin_options">Settings</a>
+            </div>
         </div>
 
         <div id="publishing-action">
