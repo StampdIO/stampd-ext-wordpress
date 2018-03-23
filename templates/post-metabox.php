@@ -5,18 +5,18 @@ global $_StampdExtWordpress;
 
 wp_nonce_field( 'stampd_ext_wp_post_metabox', 'stampd_ext_wp_nonce' );
 
-$hashed_content = hash( 'sha256', $post->post_content );
-$stamp_active   = false;
+$hashed_content   = hash( 'sha256', $post->post_content );
+$stamp_active     = false;
+$post_sig_enabled = get_option( 'stampd_ext_wp_enable_post_signature' );
 
 $post_meta = $_StampdExtWordpress->getPostStampdMeta( $post->ID );
-if ( is_array( $post_meta ) && $post_meta['stamped'] === true ) {
-	// $post_meta['stamped']
-	// $post_meta['blockchain']
-	// $post_meta['link']
-	// $post_meta['date']
-	// $post_meta['hash']
-	// $post_meta['txid']
-}
+// $post_meta['stamped']
+// $post_meta['blockchain']
+// $post_meta['link']
+// $post_meta['date']
+// $post_meta['hash']
+// $post_meta['txid']
+// $post_meta['show_sig']
 
 ?>
 <div class="inside inside--actual">
@@ -59,6 +59,18 @@ if ( is_array( $post_meta ) && $post_meta['stamped'] === true ) {
             <input id="stampd_ext_wp_date" class="full-width" type="text" autocomplete="off"
                    name="stampd_ext_wp_date" value="<?php echo $post_meta['date']; ?>" readonly>
 			<?php
+
+			if ( $post_sig_enabled ) {
+				$slug = 'stampd_ext_wp_hide_signature';
+				?>
+                <input type="hidden" name="stampd_ext_wp_update_post_meta" value="true">
+                <label for="<?php echo $slug; ?>">
+                    <input name="<?php echo $slug; ?>" type="checkbox" id="<?php echo $slug; ?>"
+                           value="enable" <?php echo ! $post_meta['show_sig'] ? 'checked' : ''; ?>>
+					<?php _e( 'Hide the post signature from this post', 'stampd' ); ?>
+                </label>
+				<?php
+			}
 		} else {
 			// other revision is stamped
 			?>

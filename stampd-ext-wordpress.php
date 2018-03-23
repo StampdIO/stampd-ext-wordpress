@@ -28,7 +28,7 @@ class StampdExtWordpress {
 		'BCH'  => 'https://blockdozer.com/insight/tx/[txid]',
 		'DASH' => 'https://live.blockcypher.com/dash/tx/[txid]',
 	);
-	private static $defaultPostSignature = 'This post has been stamped on the [blockchain] blockchain via <a target="_blank" href="https://stampd.io">stampd.io</a> on [date]. Using the SHA256 hashing algorithm on the content of the post produced the following hash [hash]. The ID of the pertinent transaction is [txid]. <a target="_blank" href="[txlink]">View the transaction on a blockchain explorer.</a>';
+	private static $defaultPostSignature = '<hr><p><small>This post has been stamped on the [blockchain] blockchain via <a target="_blank" href="https://stampd.io">stampd.io</a> on [date]. Using the SHA256 hashing algorithm on the content of the post produced the following hash [hash]. The ID of the pertinent transaction is [txid]. <a target="_blank" href="[txlink]">View the transaction on a blockchain explorer.</a></small></p>';
 
 	function __construct() {
 		$this->_hookOptions();
@@ -37,6 +37,53 @@ class StampdExtWordpress {
 		$this->_hookAdminSettingsPage();
 		$this->_hookMetaboxes();
 		$this->_addPluginSettingsLink();
+		$this->_hookPostContentFilter();
+	}
+
+	/*
+	 * Filter post content
+	 */
+	private function _hookPostContentFilter() {
+		if ( get_option( $this::$pluginPrefix . 'enable_post_signature' ) ) {
+			add_filter( 'the_content', array( $this, 'addContentSignature' ) );
+		}
+	}
+
+	/*
+	 * Add post signature
+	 */
+	function addContentSignature( $content ) {
+
+		global $post;
+
+		$post_meta = $this->getPostStampdMeta( $post->ID );
+
+		if ( $post_meta && isset( $post_meta['stamped'] ) && isset( $post_meta['hash'] ) ) {
+
+			$hashed_content = hash( 'sha256', $post->post_content );
+
+			if ( $hashed_content === $post_meta['hash'] && $post_meta['show_sig'] ) {
+				// is valid stamp
+				$post_sig      = get_option( $this::$pluginPrefix . 'signature_text' );
+				$formulate_sig = str_replace( array(
+					'[hash]',
+					'[date]',
+					'[blockchain]',
+					'[txid]',
+					'[txlink]',
+				), array(
+					$post_meta['hash'],
+					$post_meta['date'],
+					$this->blockchainToReadable( $post_meta['blockchain'] ),
+					$post_meta['txid'],
+					$post_meta['link'],
+				), $post_sig );
+
+				$content = $content . $formulate_sig;
+			}
+		}
+
+		return $content;
 	}
 
 	/*
@@ -323,7 +370,24 @@ class StampdExtWordpress {
 			return $post_id;
 		}
 
-		if ( ! isset( $_POST[ $this::$pluginPrefix . 'nonce' ] ) || ! isset( $_POST[ $this::$pluginPrefix . 'stamp_btn' ] ) ) {
+		if ( ! isset( $_POST[ $this::$pluginPrefix . 'nonce' ] ) ) {
+			return $post_id;
+		}
+
+		if ( isset( $_POST[ $this::$pluginPrefix . 'update_post_meta' ] ) ) {
+			$stampd_post_meta         = $this->getPostStampdMeta( $post_id );
+			$initial_stampd_post_meta = $stampd_post_meta;
+
+			// show sig
+			$stampd_post_meta['show_sig'] = ! isset( $_POST[ $this::$pluginPrefix . 'hide_signature' ] );
+
+			// changed, save
+			if ( $initial_stampd_post_meta !== $stampd_post_meta ) {
+				$this->savePostStampdMeta( $post_id, $stampd_post_meta );
+			}
+		}
+
+		if ( ! isset( $_POST[ $this::$pluginPrefix . 'stamp_btn' ] ) ) {
 			return $post_id;
 		}
 
@@ -391,9 +455,10 @@ class StampdExtWordpress {
 					'date'       => date( 'Y-m-d', current_time( 'timestamp', 0 ) ),
 					'hash'       => $hash,
 					'txid'       => $post_response->txid,
+					'show_sig'   => true, // default
 				) );
 
-				$this->_addNotice( __( 'Post stamped successfully. Stamps remaining: ', 'stampd' ) . $post_response->stamps_remaining . '.' );
+				$this->_addNotice( __( 'Post stamped successfully. You have ', 'stampd' ) . $post_response->stamps_remaining . __( 'stamps remaining.', 'stampd' ) );
 
 				return $post_id;
 			}
