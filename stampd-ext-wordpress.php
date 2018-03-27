@@ -20,25 +20,26 @@ Author URI: https://stampd.io
  * @copyright Copyright (c) 2018, Minas Antonios
  * @license http://opensource.org/licenses/gpl-2.0.php GPL v2 or later
  */
-
 class StampdExtWordpress {
 
 	// Statics
 	private static $pluginVersion = '1.0';
 	private static $pluginPrefix = 'stampd_ext_wp_';
-	private static $APIBaseURL = 'http://dev.stampd.io/api/v2';
-//	private static $APIBaseURL = 'https://stampd.io/api/v2';
+//	private static $APIBaseURL = 'http://dev.stampd.io/api/v2';
+	private static $APIBaseURL = 'https://stampd.io/api/v2';
 	private static $blockchains = array(
 		'BTC'  => 'Bitcoin',
 		'ETH'  => 'Ethereum',
 		'BCH'  => 'Bitcoin Cash',
 		'DASH' => 'Dash',
+		'FCT'  => 'Factom',
 	);
 	private static $blockchainLinks = array(
 		'BTC'  => 'https://blockchain.info/tx/[txid]',
 		'ETH'  => 'https://etherscan.io/tx/[txid]',
 		'BCH'  => 'https://blockdozer.com/insight/tx/[txid]',
 		'DASH' => 'https://live.blockcypher.com/dash/tx/[txid]',
+		'FCT'  => 'https://explorer.factom.com/chains/d75e9894cd4cb7370460e2b36d75ce25b74263eb0f9921f1571d332cdc6858fa/entries/[txid]',
 	);
 	private static $defaultPostSignature = '<hr><p><small>This post has been stamped on the [blockchain] blockchain via <a target="_blank" href="https://stampd.io">stampd.io</a> on [date]. Using the SHA256 hashing algorithm on the content of the post produced the following hash [hash]. The ID of the pertinent transaction is [txid]. <a target="_blank" href="[txlink]">View the transaction on a blockchain explorer.</a></small></p>';
 
