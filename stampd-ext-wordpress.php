@@ -440,7 +440,7 @@ class StampdExtWordpress {
 //    		'meta_emails'   => $email,
 //    		'meta_notes'    => $notes,
 //    		'meta_filename' => $filename,
-//    		'meta_category' => ! stampd_empty( $cat_obj ) ? $cat_obj->name : null,
+    		'meta_category' => 'WordPress',
 		);
 
 		$post_response = $this->_performPostCall( $this::$APIBaseURL . '.php', $fields );
