@@ -391,8 +391,10 @@ class StampdExtWordpress {
 			$stampd_post_meta         = $this->getPostStampdMeta( $post_id );
 			$initial_stampd_post_meta = $stampd_post_meta;
 
-			// show sig
-			$stampd_post_meta['show_sig'] = ! isset( $_POST[ $this::$pluginPrefix . 'hide_signature' ] );
+			if ( isset( $stampd_post_meta['stamped'] ) && $stampd_post_meta['stamped'] === true ) {
+				// show sig
+				$stampd_post_meta['show_sig'] = ! isset( $_POST[ $this::$pluginPrefix . 'hide_signature' ] );
+			}
 
 			// changed, save
 			if ( $initial_stampd_post_meta !== $stampd_post_meta ) {
