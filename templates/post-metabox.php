@@ -32,6 +32,7 @@ $post_meta = $_StampdExtWordpress->getPostStampdMeta( $post->ID );
 ?>
 <div class="inside inside--actual">
 	<?php
+	var_dump( $post_meta );
 	if ( ! is_array( $post_meta ) || ! $post_meta || ! isset( $post_meta['stamped'] ) ) {
 		// not stamped
 		?>

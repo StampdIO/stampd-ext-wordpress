@@ -392,15 +392,32 @@ class StampdExtWordpress {
 			return $post_id;
 		}
 
+//		$this->savePostStampdMeta( $post_id, array(
+//			'stamped'    => true,
+//			'blockchain' => 'DASH',
+//			'link'       => 'asdada',
+//			'date'       => date( 'Y-m-d', current_time( 'timestamp', 0 ) ),
+//			'hash'       => '78369af6c38dcfb027e8726bbbaa1e5fc5256c76e2674c606d8f065ca70a65c4', // asdsadasdsa dsad as dasd aasdas
+//			'txid'       => 'asdada',
+//			'show_sig'   => true, // default
+//		) );
+
 		if ( isset( $_POST[ $this::$pluginPrefix . 'update_post_meta' ] ) ) {
-			$stampd_post_meta         = $this->getPostStampdMeta( $post_id );
+			var_dump( 'upd post meta' );
+			$stampd_post_meta = $this->getPostStampdMeta( $post_id );
+			var_dump( $post_id );
+			var_dump( $stampd_post_meta );
 			$initial_stampd_post_meta = $stampd_post_meta;
 
-			// show sig
-			$stampd_post_meta['show_sig'] = ! isset( $_POST[ $this::$pluginPrefix . 'hide_signature' ] );
+			if ( isset( $stampd_post_meta['stamped'] ) && $stampd_post_meta['stamped'] === true ) {
+				// show sig
+				$stampd_post_meta['show_sig'] = ! isset( $_POST[ $this::$pluginPrefix . 'hide_signature' ] );
+			}
 
 			// changed, save
 			if ( $initial_stampd_post_meta !== $stampd_post_meta ) {
+				var_dump( 'saving as' );
+				var_dump( $stampd_post_meta );
 				$this->savePostStampdMeta( $post_id, $stampd_post_meta );
 			}
 		}
