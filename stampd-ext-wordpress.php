@@ -26,7 +26,7 @@ class StampdExtWordpress {
 	private static $pluginVersion = '1.0';
 	private static $pluginPrefix = 'stampd_ext_wp_';
 //	private static $APIBaseURL = 'http://dev.stampd.io/api/v2';
-	private static $APIBaseURL = 'https://stampd.io/api/v2';
+	private static $APIBaseURL = 'https://contratium.com/api/v2';
 	private static $blockchains = array(
 		'BTC'  => 'Bitcoin',
 		'ETH'  => 'Ethereum',
@@ -155,9 +155,10 @@ class StampdExtWordpress {
 	function loadOptions() {
 		$admin_page_slug = $this::$pluginPrefix . 'plugin_options';
 
+		$general_settings_section_slug = $this::$pluginPrefix . 'general_settings';
+
 		// add sections
-		$api_creds_section_slug = $this::$pluginPrefix . 'api_credentials';
-		add_settings_section( $api_creds_section_slug, __( 'API Credentials', 'stampd' ), array(
+		add_settings_section( $general_settings_section_slug, __( 'API Credentials', 'stampd' ), array(
 			$this,
 			'renderAPICredentialsOptionHeader'
 		), $admin_page_slug );
@@ -167,17 +168,21 @@ class StampdExtWordpress {
 		add_settings_field( $input_slug, __( 'Client ID', 'stampd' ), array(
 			$this,
 			'renderClientIDInput'
-		), $admin_page_slug, $api_creds_section_slug );
-		register_setting( $api_creds_section_slug, $input_slug );
+		), $admin_page_slug, $general_settings_section_slug );
+		register_setting( $general_settings_section_slug, $input_slug );
 
 		$input_slug = $this::$pluginPrefix . 'secret_key';
 		add_settings_field( $input_slug, __( 'Secret Key', 'stampd' ), array(
 			$this,
 			'renderSecretKeyInput'
-		), $admin_page_slug, $api_creds_section_slug );
-		register_setting( $api_creds_section_slug, $input_slug, array( $this, 'sanitizeSecretKey' ) );
+		), $admin_page_slug, $general_settings_section_slug );
+		register_setting( $general_settings_section_slug, $input_slug, array(
+			'sanitize_callback' => array(
+				$this,
+				'sanitizeSecretKey'
+			)
+		) );
 
-		$general_settings_section_slug = $this::$pluginPrefix . 'general_settings';
 		add_settings_section( $general_settings_section_slug, __( 'General Settings', 'stampd' ), array(
 			$this,
 			'renderGeneralSettingsOptionHeader'
@@ -434,13 +439,13 @@ class StampdExtWordpress {
 		$fields = array(
 			'requestedURL' => '/hash',
 			'force_method' => 'POST', // method can also be forced via a parameter
-			'sess_id'      => $session_id, // old param name: session_id
+			'sess_id'      => $session_id, // old param name session_id
 			'blockchain'   => $blockchain,
 			'hash'         => $hash,
 //    		'meta_emails'   => $email,
 //    		'meta_notes'    => $notes,
 //    		'meta_filename' => $filename,
-    		'meta_category' => 'WordPress',
+//			'meta_category' => 'WordPress',
 		);
 
 		$post_response = $this->_performPostCall( $this::$APIBaseURL . '.php', $fields );
