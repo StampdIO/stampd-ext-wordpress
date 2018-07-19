@@ -32,7 +32,7 @@ $post_meta = $_StampdExtWordpress->getPostStampdMeta( $post->ID );
 ?>
 <div class="inside inside--actual">
 	<?php
-	if ( ! is_array( $post_meta ) || ! $post_meta ) {
+	if ( ! is_array( $post_meta ) || ! $post_meta || ! isset( $post_meta['stamped'] ) ) {
 		// not stamped
 		?>
         <label for="stampd_ext_wp_hash"><?php _e( 'SHA256 hash derived from last save', 'stampd' ); ?></label>
@@ -40,7 +40,7 @@ $post_meta = $_StampdExtWordpress->getPostStampdMeta( $post->ID );
                placeholder="<?php _e( 'Hash not calculated yet', 'stampd' ); ?>"
                name="stampd_ext_wp_hash" value="<?php echo $hashed_content; ?>" readonly>
 		<?php
-	} else if ( isset( $post_meta['stamped'] ) && $post_meta['stamped'] === true ) {
+	} else if ( $post_meta['stamped'] === true ) {
 		// stamped
 		if ( $hashed_content === $post_meta['hash'] ) {
 			// current revision is stamped
