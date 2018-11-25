@@ -16,8 +16,7 @@ Author URI: https://stampd.io
  *
  * @version 1.0
  * @package stampd-ext-wordpress
- * @author Hypermetron (Minas Antonios)
- * @copyright Copyright (c) 2018, Minas Antonios
+ * @author Stampd.io
  * @license http://opensource.org/licenses/gpl-2.0.php GPL v2 or later
  */
 class StampdExtWordpress {
