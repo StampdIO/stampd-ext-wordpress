@@ -27,6 +27,8 @@ Initial submission
 
 Updated for use with Guttenberg blocks
 
+Minor JS fix
+
 == Screenshots ==
 
 1. Stampd.io plugin settings
