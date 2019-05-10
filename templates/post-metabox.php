@@ -180,7 +180,7 @@ if ( method_exists( $current_screen, 'is_block_editor' ) &&
               var jsonRes = JSON.parse(res);
 
               if (jsonRes.error) {
-                stampdCreateNotice('warning', jsonRes.data.error ? jsonRes.data.error : jsonRes.message);
+                stampdCreateNotice('warning', jsonRes.data && jsonRes.data.error ? jsonRes.data.error : jsonRes.message);
               }
 
               $this.prop('disabled', false);
