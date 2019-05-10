@@ -32,7 +32,7 @@ $post_meta = $_StampdExtWordpress->getPostStampdMeta( $post->ID );
 ?>
 <div class="inside inside--actual">
 	<?php
-	if ( ! is_array( $post_meta ) || ! $post_meta ) {
+	if ( ! is_array( $post_meta ) || ! $post_meta || ! isset( $post_meta['stamped'] ) ) {
 		// not stamped
 		?>
         <label for="stampd_ext_wp_hash"><?php _e( 'SHA256 hash derived from last save', 'stampd' ); ?></label>
@@ -40,7 +40,7 @@ $post_meta = $_StampdExtWordpress->getPostStampdMeta( $post->ID );
                placeholder="<?php _e( 'Hash not calculated yet', 'stampd' ); ?>"
                name="stampd_ext_wp_hash" value="<?php echo $hashed_content; ?>" readonly>
 		<?php
-	} else if ( isset( $post_meta['stamped'] ) && $post_meta['stamped'] === true ) {
+	} else if ( $post_meta['stamped'] === true ) {
 		// stamped
 		if ( $hashed_content === $post_meta['hash'] ) {
 			// current revision is stamped
@@ -118,4 +118,101 @@ if ( ! $stamp_active ) {
     </div>
 	<?php
 }
+
+$current_screen = get_current_screen();
+if ( method_exists( $current_screen, 'is_block_editor' ) &&
+     $current_screen->is_block_editor()
+) {
+	?>
+    <script type="text/javascript">
+
+    var stampdSavingInterval;
+    var stampdAJAXURL = '<?php echo admin_url( 'admin-ajax.php' ); ?>';
+
+    var stampdCreateNotice = function (type, message) {
+      wp.data.dispatch('core/notices').createNotice(
+        type, // Can be one of: success, info, warning, error.
+        message,
+        {
+          isDismissible: true,
+        }
+      );
+    };
+
+    jQuery(document).ready(function ($) {
+      if (wp && wp.data) {
+
+        var $body = $('body');
+
+        $body.on('click', '#stampd_ext_wp_stamp_btn', function (e) {
+
+          e.preventDefault();
+          e.stopPropagation();
+
+          var $this = $(this);
+          var $form = $this.parents('form');
+          var originalContent = wp.data.select("core/editor").getCurrentPost().content;
+          var editedContent = wp.data.select("core/editor").getEditedPostContent();
+
+          $this.prop('disabled', true);
+
+          if (originalContent !== editedContent) {
+            stampdCreateNotice('info', 'Please save your post before stamping');
+            $this.prop('disabled', false);
+            return;
+          }
+
+          var data = {
+            action: 'stampd_perform_stamping',
+            post_id: <?php echo get_the_ID(); ?>,
+          };
+
+          var formData = $form.serializeArray();
+          formData.map(function (datum) {
+            data[datum.name] = datum.value;
+          });
+
+          console.log(stampdAJAXURL, data);
+
+          $.post(stampdAJAXURL, data)
+            .done(function (res) {
+
+              var jsonRes = JSON.parse(res);
+
+              if (jsonRes.error) {
+                stampdCreateNotice('warning', jsonRes.data.error ? jsonRes.data.error : jsonRes.message);
+              }
+
+              $this.prop('disabled', false);
+            });
+        });
+
+        wp.data.subscribe(function () {
+          var isSavingPost = wp.data.select('core/editor').isSavingPost();
+
+          if (isSavingPost) {
+            window.clearInterval(stampdSavingInterval);
+            stampdSavingInterval = window.setInterval(function () {
+              var didPostSaveRequestSucceed = wp.data.select('core/editor').didPostSaveRequestSucceed();
+              if (didPostSaveRequestSucceed) {
+                window.clearInterval(stampdSavingInterval);
+                var stampdMetaboxCurrent = $('#stampd_ext_wp_post_metabox');
+                stampdMetaboxCurrent.find('input[type="button"]').prop('disabled', true);
+                $.get(window.location, function (data) {
+                  var updatedPage = $(data);
+                  var stampdMetaboxUpdated = updatedPage.find('#stampd_ext_wp_post_metabox');
+                  stampdMetaboxCurrent.html(stampdMetaboxUpdated.html())
+                });
+              }
+            }, 500)
+          }
+        })
+
+      }
+
+    });
+</script>
+	<?php
+}
 ?>
+

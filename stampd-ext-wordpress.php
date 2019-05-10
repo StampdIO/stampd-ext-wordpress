@@ -2,7 +2,6 @@
 
 /*
 Plugin Name: Stampd.io Blockchain Stamping
-Plugin URI: https://stampd.io
 Description: A blockchain stamping plugin that helps protect your rights in your digital creations by posting a unique imprint of your posts on the blockchain.
 Author: stampd.io
 Version: 1.0
@@ -16,8 +15,7 @@ Author URI: https://stampd.io
  *
  * @version 1.0
  * @package stampd-ext-wordpress
- * @author Hypermetron (Minas Antonios)
- * @copyright Copyright (c) 2018, Minas Antonios
+ * @author Stampd.io
  * @license http://opensource.org/licenses/gpl-2.0.php GPL v2 or later
  */
 class StampdExtWordpress {
@@ -153,11 +151,13 @@ class StampdExtWordpress {
 	 * Load options
 	 */
 	function loadOptions() {
+
 		$admin_page_slug = $this::$pluginPrefix . 'plugin_options';
 
+		$general_settings_section_slug = $this::$pluginPrefix . 'general_settings';
+
 		// add sections
-		$api_creds_section_slug = $this::$pluginPrefix . 'api_credentials';
-		add_settings_section( $api_creds_section_slug, __( 'API Credentials', 'stampd' ), array(
+		add_settings_section( $general_settings_section_slug, __( 'API Credentials', 'stampd' ), array(
 			$this,
 			'renderAPICredentialsOptionHeader'
 		), $admin_page_slug );
@@ -167,17 +167,16 @@ class StampdExtWordpress {
 		add_settings_field( $input_slug, __( 'Client ID', 'stampd' ), array(
 			$this,
 			'renderClientIDInput'
-		), $admin_page_slug, $api_creds_section_slug );
-		register_setting( $api_creds_section_slug, $input_slug );
+		), $admin_page_slug, $general_settings_section_slug );
+		register_setting( $general_settings_section_slug, $input_slug );
 
 		$input_slug = $this::$pluginPrefix . 'secret_key';
 		add_settings_field( $input_slug, __( 'Secret Key', 'stampd' ), array(
 			$this,
 			'renderSecretKeyInput'
-		), $admin_page_slug, $api_creds_section_slug );
-		register_setting( $api_creds_section_slug, $input_slug, array( $this, 'sanitizeSecretKey' ) );
+		), $admin_page_slug, $general_settings_section_slug );
+		register_setting( $general_settings_section_slug, $input_slug, array( $this, 'sanitizeSecretKey' ) );
 
-		$general_settings_section_slug = $this::$pluginPrefix . 'general_settings';
 		add_settings_section( $general_settings_section_slug, __( 'General Settings', 'stampd' ), array(
 			$this,
 			'renderGeneralSettingsOptionHeader'
@@ -377,13 +376,34 @@ class StampdExtWordpress {
 	/*
 	 * Save post //  $this::$pluginPrefix . 'post_metabox'
 	 */
-	function savePostMetabox( $post_id ) {
+	public function savePostMetabox( $post_id ) {
+
+		$in_ajax_mode = ! $post_id;
+
+		if ( $in_ajax_mode ) {
+			$post_id = $_REQUEST['post_id'];
+		}
 
 		if ( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE ) {
+			if ( $in_ajax_mode ) {
+				die( json_encode( array(
+					'error'   => true,
+					'type'    => 1,
+					'message' => 'Please save your post before stamping',
+				) ) );
+			}
 			return $post_id;
 		}
 
 		if ( ! isset( $_POST[ $this::$pluginPrefix . 'nonce' ] ) ) {
+			if ( $in_ajax_mode ) {
+				die( json_encode( array(
+					'error'   => true,
+					'type'    => 2,
+					'message' => 'Error in stamping, please try again',
+				) ) );
+			}
+
 			return $post_id;
 		}
 
@@ -391,8 +411,10 @@ class StampdExtWordpress {
 			$stampd_post_meta         = $this->getPostStampdMeta( $post_id );
 			$initial_stampd_post_meta = $stampd_post_meta;
 
-			// show sig
-			$stampd_post_meta['show_sig'] = ! isset( $_POST[ $this::$pluginPrefix . 'hide_signature' ] );
+			if ( isset( $stampd_post_meta['stamped'] ) && $stampd_post_meta['stamped'] === true ) {
+				// show sig
+				$stampd_post_meta['show_sig'] = ! isset( $_POST[ $this::$pluginPrefix . 'hide_signature' ] );
+			}
 
 			// changed, save
 			if ( $initial_stampd_post_meta !== $stampd_post_meta ) {
@@ -400,15 +422,29 @@ class StampdExtWordpress {
 			}
 		}
 
-		if ( ! isset( $_POST[ $this::$pluginPrefix . 'stamp_btn' ] ) ) {
+		if ( ! $in_ajax_mode && ! isset( $_POST[ $this::$pluginPrefix . 'stamp_btn' ] ) ) {
 			return $post_id;
 		}
 
 		if ( ! wp_verify_nonce( $_POST[ $this::$pluginPrefix . 'nonce' ], $this::$pluginPrefix . 'post_metabox' ) ) {
+			if ( $in_ajax_mode ) {
+				die( json_encode( array(
+					'error'   => true,
+					'type'    => 4,
+					'message' => 'Error in stamping, please try again',
+				) ) );
+			}
 			return $post_id;
 		}
 
 		if ( ! current_user_can( 'edit_page', $post_id ) || ! current_user_can( 'edit_post', $post_id ) ) {
+			if ( $in_ajax_mode ) {
+				die( json_encode( array(
+					'error'   => true,
+					'type'    => 5,
+					'message' => 'You lack edit post permissions, stamping cancelled',
+				) ) );
+			}
 			return $post_id;
 		}
 
@@ -425,6 +461,13 @@ class StampdExtWordpress {
 		if ( ! $valid_init ) {
 			$this->_addNotice( __( 'Invalid credentials', 'stampd' ), 'error' );
 
+			if ( $in_ajax_mode ) {
+				die( json_encode( array(
+					'error'   => true,
+					'type'    => 6,
+					'message' => 'Invalid stampd API credentials',
+				) ) );
+			}
 			return $post_id;
 		}
 
@@ -432,18 +475,18 @@ class StampdExtWordpress {
 
 		// Post hash
 		$fields = array(
-			'requestedURL' => '/hash',
-			'force_method' => 'POST', // method can also be forced via a parameter
-			'sess_id'      => $session_id, // old param name: session_id
-			'blockchain'   => $blockchain,
-			'hash'         => $hash,
+//			'requestedURL'  => '/hash',
+//			'force_method'  => 'POST', // method can also be forced via a parameter
+			'sess_id'       => $session_id, // old param name: session_id
+			'blockchain'    => $blockchain,
+			'hash'          => $hash,
 //    		'meta_emails'   => $email,
 //    		'meta_notes'    => $notes,
 //    		'meta_filename' => $filename,
-    		'meta_category' => 'WordPress',
+			'meta_category' => 'WordPress',
 		);
 
-		$post_response = $this->_performPostCall( $this::$APIBaseURL . '.php', $fields );
+		$post_response = $this->_performPostCall( $this::$APIBaseURL . '/hash', $fields )['json'];
 
 		if ( is_object( $post_response ) && property_exists( $post_response, 'code' ) ) {
 			$code = $post_response->code;
@@ -451,10 +494,24 @@ class StampdExtWordpress {
 			if ( $code === 106 ) {
 				$this->_addNotice( __( 'You have run out of stamps. Please visit <a href="https://stampd.io">stampd.io</a> to get more.', 'stampd' ), 'error' );
 
+				if ( $in_ajax_mode ) {
+					die( json_encode( array(
+						'error'   => true,
+						'type'    => 106,
+						'message' => 'You have run out stamps. Please visit https://stampd.io to get more.',
+					) ) );
+				}
 				return $post_id;
 			} else if ( $code === 202 ) {
 				$this->_addNotice( __( 'This post has already been stamped.', 'stampd' ), 'info' );
 
+				if ( $in_ajax_mode ) {
+					die( json_encode( array(
+						'error'   => true,
+						'type'    => 202,
+						'message' => 'This post is already stamped',
+					) ) );
+				}
 				return $post_id;
 			} else if ( $code === 301 ) {
 				// success
@@ -473,13 +530,36 @@ class StampdExtWordpress {
 
 				$this->_addNotice( __( 'Post stamped successfully. You have ', 'stampd' ) . $post_response->stamps_remaining . __( ' stamps remaining.', 'stampd' ) );
 
+				if ( $in_ajax_mode ) {
+					die( json_encode( array(
+						'error'   => false,
+						'type'    => 301,
+						'message' => 'Post stamped successfully. You have' . $post_response->stamps_remaining . ' stamps remaining.',
+					) ) );
+				}
 				return $post_id;
 			}
 
 		} else {
 			$this->_addNotice( __( 'There was an error with your stamping. Please try again.', 'stampd' ), 'error' );
+
+			if ( $in_ajax_mode ) {
+				die( json_encode( array(
+					'error'   => true,
+					'type'    => 999,
+					'message' => 'There was an error with your stamping. Please try again.',
+					'data'    => $this->_performPostCall( $this::$APIBaseURL . '/hash', $fields ),
+				) ) );
+			}
 		}
 
+		if ( $in_ajax_mode ) {
+			die( json_encode( array(
+				'error'   => true,
+				'type'    => 0,
+				'message' => 'There was an error with your stamping. Please try again.',
+			) ) );
+		}
 		return $post_id;
 	}
 
@@ -597,15 +677,48 @@ class StampdExtWordpress {
 		}
 		$fields_string = rtrim( $fields_string, '&' );
 
-		$ch = curl_init();
-		curl_setopt( $ch, CURLOPT_URL, $url );
-		curl_setopt( $ch, CURLOPT_RETURNTRANSFER, true );
-		curl_setopt( $ch, CURLOPT_POST, count( $fields ) );
-		curl_setopt( $ch, CURLOPT_POSTFIELDS, $fields_string );
-		$res = curl_exec( $ch );
-		curl_close( $ch );
+		try {
 
-		return json_decode( $res );
+			$ch = curl_init();
+
+			if ( $ch === false ) {
+				throw new Exception( 'Failed to initialize curl' );
+			}
+
+			curl_setopt( $ch, CURLOPT_URL, $url );
+			curl_setopt( $ch, CURLOPT_RETURNTRANSFER, true );
+			curl_setopt( $ch, CURLOPT_POST, count( $fields ) );
+			curl_setopt( $ch, CURLOPT_POSTFIELDS, $fields_string );
+
+			$res = curl_exec( $ch );
+
+			if ( $res === false ) {
+				throw new Exception( curl_error( $ch ), curl_errno( $ch ) );
+			}
+
+			curl_close( $ch );
+
+		} catch ( Exception $e ) {
+
+			return array(
+				'json'   => false,
+				'raw'    => $res,
+				'error'  => $e->getMessage(),
+				'code'   => $e->getCode(),
+				'fields' => $fields_string,
+				'url'    => $url,
+			);
+
+		}
+
+
+		return array(
+			'json'   => json_decode( $res ),
+			'raw'    => $res,
+			'error'  => curl_error( $ch ),
+			'fields' => $fields_string,
+			'url'    => $url,
+		);
 	}
 
 	/*
@@ -654,3 +767,6 @@ class StampdExtWordpress {
 // Init the plugin
 global $_StampdExtWordpress;
 $_StampdExtWordpress = new StampdExtWordpress();
+
+add_action( 'wp_ajax_stampd_perform_stamping', array( $_StampdExtWordpress, 'savePostMetabox' ) );
+add_action( 'wp_ajax_nopriv_stampd_perform_stamping', array( $_StampdExtWordpress, 'savePostMetabox' ) );

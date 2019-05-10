@@ -46,3 +46,7 @@
 
 #stampd_ext_wp_post_metabox .float-right {
   float: right; }
+
+.stampd-logo {
+  display: block;
+  max-height: 40px; }
