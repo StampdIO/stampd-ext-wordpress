@@ -9,7 +9,7 @@ Donate link:
 Requires at least: 4.9
 Requires PHP:      5.2.4
 Tested up to:      5.2
-Stable tag:        1.2.0
+Stable tag:        1.2.4
 
 == Description ==
 
@@ -28,6 +28,10 @@ Initial submission
 Updated for use with Guttenberg blocks
 
 Minor JS fix
+
+Updates to UI
+
+Post content fix
 
 == Screenshots ==
 

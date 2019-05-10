@@ -3,7 +3,7 @@
 /**
  * Post metabox form
  *
- * @version 1.0
+ * @version 1.2.3
  * @package stampd-ext-wordpress
  * @author Hypermetron (Minas Antonios)
  * @copyright Copyright (c) 2018, Minas Antonios
@@ -139,6 +139,16 @@ if ( method_exists( $current_screen, 'is_block_editor' ) &&
       );
     };
 
+    var stampdUpdateMetabox = function (cb) {
+      $.get(window.location, function (data) {
+        var updatedPage = $(data);
+        var stampdMetaboxCurrent = $('#stampd_ext_wp_post_metabox');
+        var stampdMetaboxUpdated = updatedPage.find('#stampd_ext_wp_post_metabox');
+        stampdMetaboxCurrent.html(stampdMetaboxUpdated.html());
+        if (cb) cb();
+      });
+    };
+
     jQuery(document).ready(function ($) {
       if (wp && wp.data) {
 
@@ -177,10 +187,16 @@ if ( method_exists( $current_screen, 'is_block_editor' ) &&
           $.post(stampdAJAXURL, data)
             .done(function (res) {
 
+              console.log(res);
+
               var jsonRes = JSON.parse(res);
 
               if (jsonRes.error) {
                 stampdCreateNotice('warning', jsonRes.data && jsonRes.data.error ? jsonRes.data.error : jsonRes.message);
+              } else {
+                stampdUpdateMetabox(function () {
+                  stampdCreateNotice('success', 'Your post has been stamped.');
+                });
               }
 
               $this.prop('disabled', false);
@@ -198,11 +214,7 @@ if ( method_exists( $current_screen, 'is_block_editor' ) &&
                 window.clearInterval(stampdSavingInterval);
                 var stampdMetaboxCurrent = $('#stampd_ext_wp_post_metabox');
                 stampdMetaboxCurrent.find('input[type="button"]').prop('disabled', true);
-                $.get(window.location, function (data) {
-                  var updatedPage = $(data);
-                  var stampdMetaboxUpdated = updatedPage.find('#stampd_ext_wp_post_metabox');
-                  stampdMetaboxCurrent.html(stampdMetaboxUpdated.html())
-                });
+                stampdUpdateMetabox();
               }
             }, 500)
           }
