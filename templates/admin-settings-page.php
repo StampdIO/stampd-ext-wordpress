@@ -3,7 +3,7 @@
 /**
  * Admin settings page
  *
- * @version 1.0
+ * @version 1.3.0
  * @package stampd-ext-wordpress
  * @author Hypermetron (Minas Antonios)
  * @copyright Copyright (c) 2018, Minas Antonios
