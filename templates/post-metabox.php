@@ -3,7 +3,7 @@
 /**
  * Post metabox form
  *
- * @version 1.2.3
+ * @version 1.3.0
  * @package stampd-ext-wordpress
  * @author Hypermetron (Minas Antonios)
  * @copyright Copyright (c) 2018, Minas Antonios
@@ -14,6 +14,9 @@ global $post;
 global $_StampdExtWordpress;
 
 wp_nonce_field( 'stampd_ext_wp_post_metabox', 'stampd_ext_wp_nonce' );
+
+//var_dump($post->post_content);
+//die();
 
 $hashed_content   = hash( 'sha256', $post->post_content );
 $stamp_active     = false;
@@ -125,6 +128,8 @@ if ( method_exists( $current_screen, 'is_block_editor' ) &&
 ) {
 	?>
     <script type="text/javascript">
+	
+	if (!$) var $ = jQuery;
 
     var stampdSavingInterval;
     var stampdAJAXURL = '<?php echo admin_url( 'admin-ajax.php' ); ?>';
