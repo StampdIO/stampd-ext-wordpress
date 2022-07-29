@@ -4,7 +4,7 @@
 Plugin Name: Stampd.io Blockchain Stamping
 Description: A blockchain stamping plugin that helps protect your rights in your digital creations by posting a unique imprint of your posts on the blockchain.
 Author: stampd.io
-Version: 1.2.4
+Version: 1.3.0
 Author URI: https://stampd.io
 */
 
@@ -13,7 +13,7 @@ Author URI: https://stampd.io
  *
  * Enables blockchain stamping of post content
  *
- * @version 1.2.4
+ * @version 1.3.0
  * @package stampd-ext-wordpress
  * @author Stampd.io
  * @license http://opensource.org/licenses/gpl-2.0.php GPL v2 or later
@@ -21,16 +21,16 @@ Author URI: https://stampd.io
 class StampdExtWordpress {
 
 	// Statics
-	private static $pluginVersion = '1.2.4';
+	private static $pluginVersion = '1.3.0';
 	private static $pluginPrefix = 'stampd_ext_wp_';
 //	private static $APIBaseURL = 'http://dev.stampd.io/api/v2';
 	private static $APIBaseURL = 'https://stampd.io/api/v2';
 	private static $blockchains = array(
 		'BTC'  => 'Bitcoin',
-		'ETH'  => 'Ethereum',
-		'BCH'  => 'Bitcoin Cash',
+		//'ETH'  => 'Ethereum',
+		//'BCH'  => 'Bitcoin Cash',
 		'DASH' => 'Dash',
-		'FCT'  => 'Factom',
+		//'FCT'  => 'Factom',
 	);
 	private static $blockchainLinks = array(
 		'BTC'  => 'https://blockchain.info/tx/[txid]',
