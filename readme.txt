@@ -8,8 +8,8 @@ Author:            STAMPD
 Donate link:       
 Requires at least: 4.9
 Requires PHP:      5.2.4
-Tested up to:      5.2
-Stable tag:        1.2.4
+Tested up to:      6.0.1
+Stable tag:        1.3.0
 
 == Description ==
 
@@ -32,6 +32,8 @@ Minor JS fix
 Updates to UI
 
 Post content fix
+
+Minor corrections for WP 6
 
 == Screenshots ==
 
