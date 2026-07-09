@@ -1,3 +1,44 @@
+# Secrets — NEVER commit
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+.doppler/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+pnpm-debug.log*
+
+# Dependencies (per-language sections will be appended by template)
+node_modules/
+
+# Build artifacts
+dist/
+build/
+.svelte-kit/
+.next/
+.cache/
+coverage/
+
+# Test artifacts
+coverage.lcov
+.nyc_output/
+
+# Deno
+.deno/
+
+# Claude Code
+.claude/local/
 /node_modules
 /.sass-cache/*
-/.idea
