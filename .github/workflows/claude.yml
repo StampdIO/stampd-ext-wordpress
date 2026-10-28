@@ -1,0 +1,292 @@
+name: Claude Assistant
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  issues:
+    types: [opened]
+  pull_request:
+    types: [opened, ready_for_review]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  id-token: write
+
+jobs:
+  claude-interactive:
+    # ⛔ The `@claude review` exclusion is MUTUAL EXCLUSION with claude-auto-review,
+    # so it must only apply where that job can actually pick the request up — and it
+    # is gated on `issue.pull_request != null`. Applied unconditionally it made
+    # `@claude review` on a plain ISSUE fire NOTHING: no run, no check, no reply.
+    # ⚠️ `contains()` is case-insensitive and substring-based, so that also swallowed
+    # `@claude Review this plan` and `@claude reviewer config is wrong`.
+    # ⛔ The `issues` branch carries the same author guard as the two comment
+    # branches. Without it an issue OPENED by claude[bot] whose body quotes
+    # '@claude' starts a full run — and estate issues about this reviewer
+    # routinely quote it.
+    # ⚠️ The three branches are symmetric in the AUTHOR GUARD only, not in
+    # routing: `pull_request_review_comment` has no `@claude review` exclusion, so
+    # that phrase typed as an inline review comment reaches THIS job rather than
+    # the reviewer. Pre-existing, and claude-auto-review only handles
+    # `issue_comment`, so there is nothing for it to hand off to.
+    # ⚠️ And the case/substring caveat is only resolved on the ISSUE path. On a PR,
+    # `@claude Review this plan` still matches `contains(…, '@claude review')` and
+    # routes to the reviewer. GitHub expressions have no word-boundary matching, so
+    # this is a known limit rather than an oversight.
+    if: |
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')
+       && (github.event.issue.pull_request == null
+           || !contains(github.event.comment.body, '@claude review'))
+       && github.event.comment.user.login != 'claude[bot]') ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')
+       && github.event.comment.user.login != 'claude[bot]') ||
+      (github.event_name == 'issues' && contains(github.event.issue.body, '@claude')
+       && github.event.issue.user.login != 'claude[bot]')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Guard — ANTHROPIC_API_KEY reachable
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "::error::ANTHROPIC_API_KEY is empty or unreachable from this repo. Without this guard the reviewer dies silently in ~28s with no comment (#149) — this is an org-level secret provisioning gap (Doppler → GitHub Config Sync), not a workflow bug."
+            exit 1
+          fi
+          # ⛔ PRESENCE IS NOT LIVENESS (#232). The check above cannot catch a key that is
+          # STILL STORED but no longer authenticates — a key deleted or rotated at the
+          # Anthropic account while the secret was left in place. MEASURED 2026-08-25: the
+          # secret was non-empty, this guard passed, and the run then died ~3min later as
+          # `is_error:true` with num_turns:1, total_cost_usd:0 and NO message naming the cause.
+          # One cheap authenticated call turns that into a readable 401.
+          code="$(curl -sS -o /dev/null -w '%{http_code}' \
+            --connect-timeout 5 --max-time 15 \
+            -H "x-api-key: $ANTHROPIC_API_KEY" \
+            -H "anthropic-version: 2023-06-01" \
+            https://api.anthropic.com/v1/models || true)"
+          # ⚠️ `|| true` + a default: curl still honours -w on a transport failure, printing
+          # `000` before exiting non-zero. Appending another default would make $code two lines.
+          code="${code:-000}"
+          case "$code" in
+            200) echo "ANTHROPIC_API_KEY authenticates (HTTP 200)" ;;
+            401|403)
+              echo "::error::ANTHROPIC_API_KEY is PRESENT but REJECTED by the API (HTTP $code). The secret exists here but no longer authenticates — typically a key deleted or rotated at the Anthropic account while the stored secret was left in place. Rotate the secret; the workflow is fine."
+              exit 1 ;;
+            # ⛔ WARN, do not fail. A transient network or API blip must NOT block every
+            # review — that would trade a rare silent failure for a frequent loud one. The
+            # only hard-fail paths are empty, 401 and 403.
+            *) echo "::warning::Could not verify ANTHROPIC_API_KEY (HTTP $code). Not blocking — this is deliberately non-fatal. If the run fails below, re-check this first." ;;
+          esac
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # ⛔ `claude[bot]` is deliberately NOT listed here, and the two jobs'
+          # lists differ for a reason. Upstream, checkHumanActor is the only bot
+          # gate on the trigger path ("prevents bot-triggered loops"). Here the
+          # actor is the COMMENTER, so allow-listing `claude[bot]` would let the
+          # reviewer's own comment reach this job — its body routinely quotes this
+          # file, which carries literal '@claude' strings in the trigger condition.
+          # The `!= 'claude[bot]'` guard above already declines it, so this is
+          # defence in depth: the job would otherwise START and then die on the
+          # actor check, leaving a red check on every review. In claude-auto-review
+          # the actor is the PR AUTHOR and the action can open PRs, so it is
+          # load-bearing there and stays.
+          allowed_bots: 'lightstone-agent-bot[bot]'
+          claude_args: '--max-turns 25 --allowedTools "Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr comment:*),Bash(gh issue view:*),Bash(gh issue comment:*),Read,Glob,Grep,LS"'
+
+  claude-auto-review:
+    # ⭐ FIRES ONCE PER PR: `opened`, plus `ready_for_review` when a draft is
+    # promoted. Re-review is ON DEMAND -- comment `@claude review` (#148).
+    #
+    # This REVERSES #144's `synchronize` trigger, and the reason is that #144's
+    # premise turned out not to hold anywhere in this estate. It argued the
+    # open-only trigger was unexecutable "where a branch protection sets
+    # dismiss_stale_reviews: true PLUS A REQUIRED APPROVAL". Measured 2026-08-10
+    # across the managed repos: most return HTTP 404 for branch protection (none
+    # at all), and the one repo that has it -- chainrecorder/staging -- carries
+    # `required_approving_review_count: 0`. A dismissed approval therefore blocks
+    # NOTHING, so `synchronize` was buying a property nothing needs while leaving
+    # the review->fix->review cycle unbounded (#148): 10 reviewer runs were
+    # charged to a single ops-gitea issue.
+    #
+    # ⛔ THE BOT MUST NOT TRIGGER ITSELF. Measured on ops-gitea PR #11: the
+    # reviewer's own comment quoted "@claude review" back, matched this condition
+    # and started another review. The loop stopped only because the NEXT comment
+    # happened not to quote it -- chance, not a bound. The Gitea template has
+    # carried this guard all along; the five GitHub ones never did.
+    # ⚠️ NOT `user.type != 'Bot'`: that would also block lightstone-agent-bot,
+    # which is in allowed_bots deliberately so the address-feedback path can ask
+    # for a review. Exclude the REVIEWER specifically.
+    #
+    # ⚠️ WHAT THIS COSTS, stated plainly: commits pushed AFTER the first review are
+    # not reviewed unless someone asks. #144 measured that cost once -- 23 of 90
+    # merged commits "reviewed by nothing". The mitigation is deliberate rather
+    # than automatic: `@claude review` re-runs THIS job on the current diff.
+    # If a repo ever does require an approval, restore `synchronize` there.
+    if: |
+      (github.event_name == 'pull_request' && github.event.pull_request.draft != true) ||
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request != null
+       && contains(github.event.comment.body, '@claude review')
+       && github.event.comment.user.login != 'claude[bot]')
+    # Kept, though `synchronize` is gone: `opened` and an immediate
+    # `ready_for_review`, or two `@claude review` comments, can still overlap. A
+    # review of a superseded diff has no value, so supersede rather than serialize.
+    concurrency:
+      group: claude-auto-review-${{ github.event.pull_request.number || github.event.issue.number }}
+      cancel-in-progress: true
+    runs-on: ubuntu-latest
+    steps:
+      # ⚠️ On the `@claude review` COMMENT path this checks out the DEFAULT BRANCH,
+      # not the PR: a comment event carries no PR ref. `Bash(git log/diff/show)`
+      # are allow-listed below, so those tools describe the wrong tree there —
+      # `gh pr diff` is API-backed and is the ONLY valid diff source on that path.
+      # The prompt says so explicitly.
+      # ⛔ Deliberately NOT pinned to `refs/pull/N/head`. Pinning would put
+      # fork-authored content in a job holding `contents: write` and an app token
+      # regardless of who opened the PR — the `pull_request_target` shape — and
+      # with `fetch-depth: 1` there is no remote-tracking branch, so the git tools
+      # still could not produce a diff. That trade buys nothing and costs a real
+      # exposure. Revisit only together with the toolset.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Guard — ANTHROPIC_API_KEY reachable
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "::error::ANTHROPIC_API_KEY is empty or unreachable from this repo. Without this guard the reviewer dies silently in ~28s with no comment (#149) — this is an org-level secret provisioning gap (Doppler → GitHub Config Sync), not a workflow bug."
+            exit 1
+          fi
+          # ⛔ PRESENCE IS NOT LIVENESS (#232). The check above cannot catch a key that is
+          # STILL STORED but no longer authenticates — a key deleted or rotated at the
+          # Anthropic account while the secret was left in place. MEASURED 2026-08-25: the
+          # secret was non-empty, this guard passed, and the run then died ~3min later as
+          # `is_error:true` with num_turns:1, total_cost_usd:0 and NO message naming the cause.
+          # One cheap authenticated call turns that into a readable 401.
+          code="$(curl -sS -o /dev/null -w '%{http_code}' \
+            --connect-timeout 5 --max-time 15 \
+            -H "x-api-key: $ANTHROPIC_API_KEY" \
+            -H "anthropic-version: 2023-06-01" \
+            https://api.anthropic.com/v1/models || true)"
+          # ⚠️ `|| true` + a default: curl still honours -w on a transport failure, printing
+          # `000` before exiting non-zero. Appending another default would make $code two lines.
+          code="${code:-000}"
+          case "$code" in
+            200) echo "ANTHROPIC_API_KEY authenticates (HTTP 200)" ;;
+            401|403)
+              echo "::error::ANTHROPIC_API_KEY is PRESENT but REJECTED by the API (HTTP $code). The secret exists here but no longer authenticates — typically a key deleted or rotated at the Anthropic account while the stored secret was left in place. Rotate the secret; the workflow is fine."
+              exit 1 ;;
+            # ⛔ WARN, do not fail. A transient network or API blip must NOT block every
+            # review — that would trade a rare silent failure for a frequent loud one. The
+            # only hard-fail paths are empty, 401 and 403.
+            *) echo "::warning::Could not verify ANTHROPIC_API_KEY (HTTP $code). Not blocking — this is deliberately non-fatal. If the run fails below, re-check this first." ;;
+          esac
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          allowed_bots: 'claude[bot],lightstone-agent-bot[bot]'
+          # Wide READ-ONLY allowlist + closed-toolset prompt ported from
+          # agent-engine's hardened claude-auto-review. A minimal allowlist made
+          # the reviewer burn its limited turns on denied tool calls and post NO
+          # review while the check went green; these tools are read-only in
+          # intent and the static-review prompt below never asks for
+          # state-changing operations. --max-turns is margin for large diffs
+          # once denials are gone — the prompt, not the bump, is the lever.
+          # Held at 25, matching claude-interactive (#143): at 15 the reviewer
+          # died mid-task on a subset of PRs with "Reached maximum number of
+          # turns", posting NO comment. The check went red, but red then meant
+          # "the reviewer died", not "the reviewer found a problem" — and the
+          # comment IS the durable review record, so those PRs had none.
+          claude_args: '--max-turns 25 --allowedTools "Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr comment:*),Bash(gh pr review:*),Bash(gh pr checks:*),Bash(gh api:*),Bash(gh workflow view:*),Bash(git log:*),Bash(git diff:*),Bash(git show:*),Bash(cat:*),Bash(head:*),Bash(tail:*),Bash(sed:*),Bash(wc:*),Bash(grep:*),Read,Glob,Grep,LS"'
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+
+            This is a STATIC review with a CLOSED toolset. `gh pr diff <N>`
+            returns the COMPLETE diff in one call — read that plus the PR
+            description and that is normally everything you need to review.
+
+            Use ONLY these tools: `gh pr diff`/`view`/`comment`/`review`, and
+            `Read`/`Grep` for any repo file you need for context. Do NOT explore
+            the filesystem or try to validate, lint, build, test, or execute the
+            code — no find, ls, awk, shellcheck, yamllint, actionlint, jq, deno,
+            make, python, node, npm, etc. You cannot run the code here; every
+            such call is DENIED and burns one of your limited turns. Judge
+            correctness from the diff and the tests the author says they ran; if
+            something can't be confirmed by reading, raise it as a non-blocking
+            concern to verify. Spend your turns reading the diff and writing the
+            review, not exploring.
+
+            Review ONLY the changes in this PR by running: gh pr diff ${{ github.event.pull_request.number || github.event.issue.number }}
+            ⛔ `gh pr diff` is the ONLY valid diff source. On a comment-triggered
+            run the checkout is the DEFAULT BRANCH, not this PR, so `git diff` /
+            `git log` / `git show` describe the wrong tree — do not use them to
+            decide what the PR changes.
+
+            Step 1 — Post the detailed review as a COMMENT via
+            `gh pr comment ${{ github.event.pull_request.number || github.event.issue.number }} --body "..."`:
+            1. Summary of changes (2-3 bullets based on the actual diff)
+            2. Concerns — label each explicitly as BLOCKING or non-blocking.
+               BLOCKING = security holes, correctness bugs, breaking changes,
+               restricted-path edits. Non-blocking = style, naming, optional
+               refactors, future-proofing suggestions.
+            3. Suggestions for improvement
+
+            Always post this comment — it is the record the autonomous
+            address-feedback role reads (it triggers on claude[bot] issue
+            comments, NOT on review events).
+
+            ⛔ WRITING (governs the Step 1 comment body, and everything else
+            you post): you are posting as a bot, about people. NEVER `@`-mention
+            the account you are posting from, and never write "me" vs "you" as
+            though the posting identity were a separate party from the account in
+            use. Name the decision and the reason, not the actor.
+
+            Step 2 — Decide a verdict and submit a REVIEW:
+            - ⛔ Determine whether the author is a BOT — test the BOOLEAN,
+              never a login string:
+              `gh pr view ${{ github.event.pull_request.number || github.event.issue.number }} --json author --jq '.author.is_bot'`
+              Do NOT compare `.author.login` against `claude` or
+              `lightstone-agent-bot`. `gh` prefixes bot logins with `app/`
+              (measured: it returns `app/lightstone-agent-bot`), so a literal
+              comparison never matches and the gate reads FAIL-OPEN. `is_bot` is
+              also identity-agnostic, so a third agent identity is covered
+              without editing this file again.
+            - ⛔ FAIL CLOSED on the read itself: approve ONLY if that command
+              prints **exactly** `false`. Empty output, an error, a deleted
+              author, or a future `gh` that drops the field must all be treated
+              as a BOT and skip the approve. The whole point of this gate is that
+              a mis-read once approved automated work silently, so "not clearly
+              false" is not "true enough to approve".
+            - If there are NO BLOCKING concerns AND `is_bot` printed exactly
+              `false`, submit an approving review:
+              `gh pr review ${{ github.event.pull_request.number || github.event.issue.number }} --approve --body "Auto-approved by Claude review — see review comment for details."`
+            - ⛔ If `is_bot` is anything other than exactly `false`, SKIP the
+              approve. ⚠️ This also covers third-party bots — `dependabot` and
+              `renovate` read `is_bot: true`, so their PRs are no longer
+              auto-approved either. That is the intended trade for a gate that
+              does not need editing per identity. Leave the comment; a
+              human approves or does not. The reasons differ per identity and
+              are recorded here as rationale, NOT as the test:
+              • `claude` — GitHub blocks self-approval, so it would error. That
+                reason is mechanical, which is exactly why it failed to
+                generalise to a second identity.
+              • `lightstone-agent-bot` — a separate GitHub App, so it is NOT
+                self-approval: the approve does not error, it SUCCEEDS AND
+                COUNTS. Wherever a branch protection requires an approving
+                review, that makes an agent-authored PR mergeable with ZERO
+                human review — the gate satisfied by the same automation it
+                exists to check.
+              An automated approval of automated work is not review.
+            - If there ARE BLOCKING concerns, do NOT approve. The comment
+              stands; a human or the address-feedback role handles the fix.
+
+            Focus on PHP/WordPress best practices, security, and coding standards. Reference Lightstone ecosystem standards
+            at https://github.com/LightstoneEnterprise/lightstone-standards/tree/production/standards.
