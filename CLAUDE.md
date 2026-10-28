@@ -9,7 +9,7 @@ Stampd.io WordPress plugin — SHA-256 hashes post content and stamps it on the 
 ## Stack
 
 - **Language/Runtime**: php-wordpress
-- **Doppler project**: `stampd-ext-wordpress`
+- **Doppler project**: none — the plugin holds no secrets; each site owner enters their own stampd.io API credentials
 - **Default branch**: `production`
 - **Deploy target**: distributed WordPress plugin (not server-deployed)
 
@@ -74,11 +74,22 @@ The Claude reviewer flags:
 
 ## Repo structure
 
-<!-- App-specific layout — fill in after scaffold -->
+The generic plugin layout above is the target shape; today's layout is flatter:
+
+```
+stampd-ext-wordpress.php   # main plugin file with WP header
+templates/                 # admin/template partials
+assets/                    # JS, CSS
+gulp/, gulpfile.js         # asset build
+readme.txt                 # WP.org-style readme
+```
 
 ## Commands
 
-<!-- Stack-specific commands inserted by scaffold -->
+```bash
+# Syntax check (what CI and the pre-commit hook run; PHP version from .php-version)
+find . -name "*.php" -not -path "./node_modules/*" -exec php -l {} \;
+```
 
 ## Reference
 

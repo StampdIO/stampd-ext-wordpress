@@ -1,0 +1,65 @@
+name: PR Checks
+
+on:
+  pull_request:
+    branches: [production]
+    types: [opened, synchronize, reopened]
+
+jobs:
+  syntax:
+    name: PHP Syntax Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version-file: .php-version
+      - name: Lint all PHP files
+        run: |
+          ERRORS=0
+          while IFS= read -r file; do
+            if ! php -l "$file" > /dev/null; then
+              echo "::error file=$file::PHP syntax error"
+              ERRORS=$((ERRORS + 1))
+            fi
+          done < <(find . -name "*.php" -not -path "./vendor/*" -not -path "./node_modules/*")
+          if [ "$ERRORS" -gt 0 ]; then
+            echo "$ERRORS file(s) failed syntax check"
+            exit 1
+          fi
+          echo "All PHP files passed syntax check"
+
+  phpcs:
+    name: PHP CodeSniffer
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version-file: .php-version
+          tools: phpcs, cs2pr
+      - name: Run phpcs
+        run: |
+          if [ -f phpcs.xml ] || [ -f phpcs.xml.dist ]; then
+            phpcs --report=checkstyle | cs2pr
+          else
+            phpcs --standard=WordPress --report=checkstyle . | cs2pr || true
+          fi
+
+  pr-status:
+    name: PR Status
+    runs-on: ubuntu-latest
+    # phpcs is advisory (continue-on-error above) — excluded from needs/gate,
+    # matching how deno/python-fastapi exclude their advisory typecheck (#129.3).
+    needs: [syntax]
+    if: always()
+    steps:
+      - name: Summary
+        run: |
+          echo "PHP Syntax: ${{ needs.syntax.result }}"
+          if [ "${{ needs.syntax.result }}" != "success" ]; then
+            exit 1
+          fi
