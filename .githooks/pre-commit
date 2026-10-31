@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# Pre-commit hook for WordPress plugin projects (Lightstone standards)
+# Bypass with: SKIP_HOOKS=1 git commit ... (do not use --no-verify)
+
+set -e
+
+if [ -n "$SKIP_HOOKS" ]; then
+  echo "SKIP_HOOKS set — skipping pre-commit checks"
+  exit 0
+fi
+
+if ! command -v php &> /dev/null; then
+  echo "php not found — install PHP 8.0+"
+  exit 1
+fi
+
+# Syntax-check every staged .php file
+echo "→ php -l on staged PHP files"
+CHANGED=$(git diff --cached --name-only --diff-filter=ACM | grep '\.php$' || true)
+if [ -n "$CHANGED" ]; then
+  ERRORS=0
+  while IFS= read -r file; do
+    if ! php -l "$file" > /dev/null; then
+      echo "  syntax error in $file"
+      ERRORS=$((ERRORS + 1))
+    fi
+  done <<< "$CHANGED"
+  if [ "$ERRORS" -gt 0 ]; then
+    echo "$ERRORS PHP file(s) failed syntax check"
+    exit 1
+  fi
+fi
+
+# phpcs if available
+if command -v phpcs &> /dev/null; then
+  echo "→ phpcs (WordPress standard)"
+  if [ -f phpcs.xml ] || [ -f phpcs.xml.dist ]; then
+    phpcs
+  else
+    phpcs --standard=WordPress . || true  # non-blocking unless configured
+  fi
+fi
+
+echo "✓ pre-commit checks passed"
