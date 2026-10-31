@@ -23,6 +23,15 @@ It requires that you have an account in stampd.io. Visit this URL to register: h
 
 == Changelog ==
 
+= 1.4.0 =
+
+* Tested with WordPress 7.1 and PHP 8.3.
+* The API secret key is sent in the request body instead of the URL.
+* Requests use the WordPress HTTP API with timeouts.
+* A failed stamp is no longer sent a second time.
+* Showing or hiding the signature now needs a valid nonce and edit rights on the post.
+* Output escaping and a guard for content filters run outside the loop.
+
 Initial submission
 
 Updated for use with Guttenberg blocks
@@ -34,14 +43,6 @@ Updates to UI
 Post content fix
 
 Minor corrections for WP 6
-
-= 1.4.0 =
-
-* Tested with WordPress 7.1 and PHP 8.3.
-* The API secret key is sent in the request body instead of the URL.
-* Requests use the WordPress HTTP API with timeouts.
-* A failed stamp is no longer sent a second time.
-* Output escaping and a guard for content filters run outside the loop.
 
 == Screenshots ==
 

@@ -88,10 +88,10 @@ class StampdExtWordpress {
 					'[txid]',
 					'[txlink]',
 				), array(
-					$post_meta['hash'],
-					$post_meta['date'],
+					esc_html( $post_meta['hash'] ),
+					esc_html( $post_meta['date'] ),
 					$this->blockchainToReadable( $post_meta['blockchain'] ),
-					$post_meta['txid'],
+					esc_html( $post_meta['txid'] ),
 					esc_url( $post_meta['link'] ),
 				), $post_sig );
 
@@ -386,7 +386,7 @@ class StampdExtWordpress {
 		$in_ajax_mode = ! $post_id;
 
 		if ( $in_ajax_mode ) {
-			$post_id = $_REQUEST['post_id'];
+			$post_id = absint( $_REQUEST['post_id'] );
 		}
 
 		if ( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE ) {
@@ -412,25 +412,7 @@ class StampdExtWordpress {
 			return $post_id;
 		}
 
-		if ( isset( $_POST[ $this::$pluginPrefix . 'update_post_meta' ] ) ) {
-			$stampd_post_meta         = $this->getPostStampdMeta( $post_id );
-			$initial_stampd_post_meta = $stampd_post_meta;
-
-			if ( isset( $stampd_post_meta['stamped'] ) && $stampd_post_meta['stamped'] === true ) {
-				// show sig
-				$stampd_post_meta['show_sig'] = ! isset( $_POST[ $this::$pluginPrefix . 'hide_signature' ] );
-			}
-
-			// changed, save
-			if ( $initial_stampd_post_meta !== $stampd_post_meta ) {
-				$this->savePostStampdMeta( $post_id, $stampd_post_meta );
-			}
-		}
-
-		if ( ! $in_ajax_mode && ! isset( $_POST[ $this::$pluginPrefix . 'stamp_btn' ] ) ) {
-			return $post_id;
-		}
-
+		// Verify before any write, the signature-visibility update below included
 		if ( ! wp_verify_nonce( $_POST[ $this::$pluginPrefix . 'nonce' ], $this::$pluginPrefix . 'post_metabox' ) ) {
 			if ( $in_ajax_mode ) {
 				die( json_encode( array(
@@ -450,6 +432,25 @@ class StampdExtWordpress {
 					'message' => 'You lack edit post permissions, stamping cancelled',
 				) ) );
 			}
+			return $post_id;
+		}
+
+		if ( isset( $_POST[ $this::$pluginPrefix . 'update_post_meta' ] ) ) {
+			$stampd_post_meta         = $this->getPostStampdMeta( $post_id );
+			$initial_stampd_post_meta = $stampd_post_meta;
+
+			if ( isset( $stampd_post_meta['stamped'] ) && $stampd_post_meta['stamped'] === true ) {
+				// show sig
+				$stampd_post_meta['show_sig'] = ! isset( $_POST[ $this::$pluginPrefix . 'hide_signature' ] );
+			}
+
+			// changed, save
+			if ( $initial_stampd_post_meta !== $stampd_post_meta ) {
+				$this->savePostStampdMeta( $post_id, $stampd_post_meta );
+			}
+		}
+
+		if ( ! $in_ajax_mode && ! isset( $_POST[ $this::$pluginPrefix . 'stamp_btn' ] ) ) {
 			return $post_id;
 		}
 
@@ -678,10 +679,11 @@ class StampdExtWordpress {
 	 *
 	 * @param $url string
 	 * @param $fields array of strings
-	 * @param $timeout int seconds; a hash call waits for the blockchain broadcast
+	 * @param $timeout int seconds; a hash call waits for the blockchain broadcast. Keep it above the API's own
+	 *                 node timeouts: a reply lost to it leaves the post stamped and charged but unmarked here
 	 * @return array json (decoded reply or false), error (message or '')
 	 */
-	private function _performPostCall( $url, $fields = array(), $timeout = 90 ) {
+	private function _performPostCall( $url, $fields = array(), $timeout = 150 ) {
 		$res = wp_remote_post( $url, array(
 			'body'    => $fields,
 			'timeout' => $timeout,
