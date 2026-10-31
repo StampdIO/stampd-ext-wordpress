@@ -59,11 +59,11 @@ $post_meta = $_StampdExtWordpress->getPostStampdMeta( $post->ID );
             <label for="stampd_ext_wp_txid"><?php _e( 'Transaction ID', 'stampd' ); ?>
                 <small><a class="float-right"
                           target="_blank"
-                          href="<?php echo $post_meta['link']; ?>"><?php _e( 'View transaction', 'stampd' ); ?></a>
+                          href="<?php echo esc_url( $post_meta['link'] ); ?>"><?php _e( 'View transaction', 'stampd' ); ?></a>
                 </small>
             </label>
             <input id="stampd_ext_wp_txid" class="full-width" type="text" autocomplete="off"
-                   name="stampd_ext_wp_txid" value="<?php echo $post_meta['txid']; ?>" readonly>
+                   name="stampd_ext_wp_txid" value="<?php echo esc_attr( $post_meta['txid'] ); ?>" readonly>
             <label for="stampd_ext_wp_date"><?php _e( 'Blockchain', 'stampd' ); ?></label>
             <input id="stampd_ext_wp_date" class="full-width" type="text" autocomplete="off"
                    name="stampd_ext_wp_date"
@@ -71,7 +71,7 @@ $post_meta = $_StampdExtWordpress->getPostStampdMeta( $post->ID );
                    readonly>
             <label for="stampd_ext_wp_date"><?php _e( 'Date', 'stampd' ); ?></label>
             <input id="stampd_ext_wp_date" class="full-width" type="text" autocomplete="off"
-                   name="stampd_ext_wp_date" value="<?php echo $post_meta['date']; ?>" readonly>
+                   name="stampd_ext_wp_date" value="<?php echo esc_attr( $post_meta['date'] ); ?>" readonly>
 			<?php
 
 			if ( $post_sig_enabled ) {
@@ -197,7 +197,7 @@ if ( method_exists( $current_screen, 'is_block_editor' ) &&
               var jsonRes = JSON.parse(res);
 
               if (jsonRes.error) {
-                stampdCreateNotice('warning', jsonRes.data && jsonRes.data.error ? jsonRes.data.error : jsonRes.message);
+                stampdCreateNotice('warning', jsonRes.message); // jsonRes.data holds the raw detail (logged above)
               } else {
                 stampdUpdateMetabox(function () {
                   stampdCreateNotice('success', 'Your post has been stamped.');

@@ -7,9 +7,9 @@ Author URI:        https://stampd.io
 Author:            STAMPD
 Donate link:       
 Requires at least: 4.9
-Requires PHP:      5.2.4
-Tested up to:      6.0.1
-Stable tag:        1.3.0
+Requires PHP:      7.4
+Tested up to:      7.1
+Stable tag:        1.4.0
 
 == Description ==
 
@@ -22,6 +22,15 @@ Learn more about it and how it works: https://stampd.io/#/about
 It requires that you have an account in stampd.io. Visit this URL to register: https://stampd.io/#/register
 
 == Changelog ==
+
+= 1.4.0 =
+
+* Tested with WordPress 7.1 and PHP 8.3.
+* The API secret key is sent in the request body instead of the URL.
+* Requests use the WordPress HTTP API with timeouts.
+* A failed stamp is no longer sent a second time.
+* Showing or hiding the signature now needs a valid nonce and edit rights on the post.
+* Output escaping and a guard for content filters run outside the loop.
 
 Initial submission
 
