@@ -4,7 +4,7 @@
 Plugin Name: Stampd.io Blockchain Stamping
 Description: A blockchain stamping plugin that helps protect your rights in your digital creations by posting a unique imprint of your posts on the blockchain.
 Author: stampd.io
-Version: 1.3.0
+Version: 1.4.0
 Author URI: https://stampd.io
 */
 
@@ -13,7 +13,7 @@ Author URI: https://stampd.io
  *
  * Enables blockchain stamping of post content
  *
- * @version 1.3.0
+ * @version 1.4.0
  * @package stampd-ext-wordpress
  * @author Stampd.io
  * @license http://opensource.org/licenses/gpl-2.0.php GPL v2 or later
@@ -21,7 +21,7 @@ Author URI: https://stampd.io
 class StampdExtWordpress {
 
 	// Statics
-	private static $pluginVersion = '1.3.0';
+	private static $pluginVersion = '1.4.0';
 	private static $pluginPrefix = 'stampd_ext_wp_';
 //	private static $APIBaseURL = 'http://dev.stampd.io/api/v2';
 	private static $APIBaseURL = 'https://stampd.io/api/v2';
@@ -67,6 +67,11 @@ class StampdExtWordpress {
 
 		global $post;
 
+		// the_content also runs outside the loop (feeds, REST, other plugins), where there is no post
+		if ( ! $post ) {
+			return $content;
+		}
+
 		$post_meta = $this->getPostStampdMeta( $post->ID );
 
 		if ( $post_meta && isset( $post_meta['stamped'] ) && isset( $post_meta['hash'] ) ) {
@@ -87,7 +92,7 @@ class StampdExtWordpress {
 					$post_meta['date'],
 					$this->blockchainToReadable( $post_meta['blockchain'] ),
 					$post_meta['txid'],
-					$post_meta['link'],
+					esc_url( $post_meta['link'] ),
 				), $post_sig );
 
 				$content = $content . $formulate_sig;
@@ -112,8 +117,8 @@ class StampdExtWordpress {
 	function renderAdminNotices() {
 		$trans_slug = $this::$pluginPrefix . '_notices';
 		if ( $notice = get_transient( $trans_slug ) ) { ?>
-        <div class="notice notice-<?php echo $notice['type']; ?> is-dismissible">
-            <p><?php echo $notice['message']; ?></p>
+        <div class="notice notice-<?php echo esc_attr( $notice['type'] ); ?> is-dismissible">
+            <p><?php echo wp_kses_post( $notice['message'] ); ?></p>
             <button type="button" class="notice-dismiss"><span
                         class="screen-reader-text"><?php _e( 'Dismiss this notice.' ); ?></span></button>
             </div><?php
@@ -237,7 +242,7 @@ class StampdExtWordpress {
 		$slug = $this::$pluginPrefix . 'signature_text';
 		?>
         <textarea name="<?php echo $slug; ?>" id="<?php echo $slug; ?>" class="large-text code"
-                  rows="5"><?php echo get_option( $slug, $this::$defaultPostSignature ); ?></textarea>
+                  rows="5"><?php echo esc_textarea( get_option( $slug, $this::$defaultPostSignature ) ); ?></textarea>
         <p class="description">
 			<?php _e( 'These shortcodes will be replaced with actual values when used within the signature text field:', 'stampd' ); ?>
         </p>
@@ -274,7 +279,7 @@ class StampdExtWordpress {
 		?>
         <input autocomplete="false" type="text" name="<?php echo $slug; ?>"
                id="<?php echo $slug; ?>"
-               value="<?php echo get_option( $slug ); ?>"/>
+               value="<?php echo esc_attr( get_option( $slug ) ); ?>"/>
 		<?php
 	}
 
@@ -286,7 +291,7 @@ class StampdExtWordpress {
 		?>
         <input autocomplete="new-password" type="password" name="<?php echo $slug; ?>"
                id="<?php echo $slug; ?>"
-               value="<?php echo get_option( $slug ); ?>"/>
+               value="<?php echo esc_attr( get_option( $slug ) ); ?>"/>
 		<?php
 	}
 
@@ -490,7 +495,8 @@ class StampdExtWordpress {
 			'meta_category' => 'WordPress',
 		);
 
-		$post_response = $this->_performPostCall( $this::$APIBaseURL . '/hash', $fields )['json'];
+		$post_call     = $this->_performPostCall( $this::$APIBaseURL . '/hash', $fields );
+		$post_response = $post_call['json'];
 
 		if ( is_object( $post_response ) && property_exists( $post_response, 'code' ) ) {
 			$code = $post_response->code;
@@ -552,7 +558,8 @@ class StampdExtWordpress {
 					'error'   => true,
 					'type'    => 999,
 					'message' => 'There was an error with your stamping. Please try again.',
-					'data'    => $this->_performPostCall( $this::$APIBaseURL . '/hash', $fields ),
+					// The first reply's error only: re-sending the stamp to describe the failure posted it twice
+					'data'    => array( 'error' => $post_call['error'] ),
 				) ) );
 			}
 		}
@@ -671,83 +678,46 @@ class StampdExtWordpress {
 	 *
 	 * @param $url string
 	 * @param $fields array of strings
-	 * @return JSON, false
+	 * @param $timeout int seconds; a hash call waits for the blockchain broadcast
+	 * @return array json (decoded reply or false), error (message or '')
 	 */
-	private function _performPostCall( $url, $fields = array() ) {
-		$fields_string = '';
+	private function _performPostCall( $url, $fields = array(), $timeout = 90 ) {
+		$res = wp_remote_post( $url, array(
+			'body'    => $fields,
+			'timeout' => $timeout,
+		) );
 
-		foreach ( $fields as $key => $value ) {
-			$fields_string .= $key . '=' . $value . '&';
-		}
-		$fields_string = rtrim( $fields_string, '&' );
-
-		try {
-
-			$ch = curl_init();
-
-			if ( $ch === false ) {
-				throw new Exception( 'Failed to initialize curl' );
-			}
-
-			curl_setopt( $ch, CURLOPT_URL, $url );
-			curl_setopt( $ch, CURLOPT_RETURNTRANSFER, true );
-			curl_setopt( $ch, CURLOPT_POST, count( $fields ) );
-			curl_setopt( $ch, CURLOPT_POSTFIELDS, $fields_string );
-
-			$res = curl_exec( $ch );
-
-			if ( $res === false ) {
-				throw new Exception( curl_error( $ch ), curl_errno( $ch ) );
-			}
-
-			curl_close( $ch );
-
-		} catch ( Exception $e ) {
-
+		if ( is_wp_error( $res ) ) {
 			return array(
-				'json'   => false,
-				'raw'    => $res,
-				'error'  => $e->getMessage(),
-				'code'   => $e->getCode(),
-				'fields' => $fields_string,
-				'url'    => $url,
+				'json'  => false,
+				'error' => $res->get_error_message(),
 			);
-
 		}
 
+		$json = json_decode( wp_remote_retrieve_body( $res ) );
 
 		return array(
-			'json'   => json_decode( $res ),
-			'raw'    => $res,
-			'error'  => curl_error( $ch ),
-			'fields' => $fields_string,
-			'url'    => $url,
+			'json'  => $json,
+			'error' => $json === null ? 'Unexpected reply, HTTP ' . wp_remote_retrieve_response_code( $res ) : '',
 		);
-	}
-
-	/*
-     * Perform get call
-     *
-     * @param $url string
-     * @return JSON, false
-     */
-	private function _performGetCall( $url ) {
-		$res = file_get_contents( $url );
-
-		return json_decode( $res );
 	}
 
 	/*
 	 * API /init
 	 *
+	 * The credentials go in a POST body, never the URL, so they stay out of server access logs. The API answers
+	 * /init on GET only; force_method is its documented override.
+	 *
 	 * @param $client_id string
 	 * @param $secret_key string
-	 * @return _performGetCall
+	 * @return object|false|null decoded reply
 	 */
 	private function _APIInitCall( $client_id, $secret_key ) {
-		$url = $this::$APIBaseURL . '/init?client_id=' . $client_id . '&secret_key=' . $secret_key;
-
-		return $this->_performGetCall( $url );
+		return $this->_performPostCall( $this::$APIBaseURL . '/init', array(
+			'force_method' => 'GET',
+			'client_id'    => $client_id,
+			'secret_key'   => $secret_key,
+		), 20 )['json'];
 	}
 
 	/*
@@ -773,4 +743,3 @@ global $_StampdExtWordpress;
 $_StampdExtWordpress = new StampdExtWordpress();
 
 add_action( 'wp_ajax_stampd_perform_stamping', array( $_StampdExtWordpress, 'savePostMetabox' ) );
-add_action( 'wp_ajax_nopriv_stampd_perform_stamping', array( $_StampdExtWordpress, 'savePostMetabox' ) );

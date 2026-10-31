@@ -7,9 +7,9 @@ Author URI:        https://stampd.io
 Author:            STAMPD
 Donate link:       
 Requires at least: 4.9
-Requires PHP:      5.2.4
-Tested up to:      6.0.1
-Stable tag:        1.3.0
+Requires PHP:      7.4
+Tested up to:      7.1
+Stable tag:        1.4.0
 
 == Description ==
 
@@ -34,6 +34,14 @@ Updates to UI
 Post content fix
 
 Minor corrections for WP 6
+
+= 1.4.0 =
+
+* Tested with WordPress 7.1 and PHP 8.3.
+* The API secret key is sent in the request body instead of the URL.
+* Requests use the WordPress HTTP API with timeouts.
+* A failed stamp is no longer sent a second time.
+* Output escaping and a guard for content filters run outside the loop.
 
 == Screenshots ==
 
